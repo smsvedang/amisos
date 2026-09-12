@@ -10,7 +10,7 @@ function requireAdmin(claims) {
 }
 
 async function sendVerificationEmail(uid) {
-  const apiKey = process.env.FIREBASE_WEB_API_KEY
+  const apiKey = process.env.FIREBASE_WEB_API_KEY || process.env.VITE_FIREBASE_API_KEY
   if (!apiKey) throw new Error('FIREBASE_WEB_API_KEY is required to send verification emails')
   const customToken = await adminAuth.createCustomToken(uid)
   const signInResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`, {
