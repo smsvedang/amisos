@@ -39,6 +39,18 @@ export default async function handler(request, response) {
 
     if (request.method === 'GET') {
       const snapshot = await adminDb.collection('users').get()
+      const assignmentsSnapshot = await adminDb.collection('facultyAssignments').get()
+      const studentsByFaculty = new Map()
+      assignmentsSnapshot.docs.forEach((assignment) => {
+        const data = assignment.data()
+        if (!data.studentUid || !data.facultyUid) return
+        const students = studentsByFaculty.get(data.facultyUid) || []
+        students.push(data.studentUid)
+        studentsByFaculty.set(data.facultyUid, students)
+      })
+      await Promise.all([...studentsByFaculty.entries()].map(([facultyUid, studentIds]) =>
+        adminDb.collection('users').doc(facultyUid).set({ studentIds: [...new Set(studentIds)] }, { merge: true }),
+      ))
       const users = await Promise.all(snapshot.docs.map(async (document) => {
         const data = document.data()
         try {
@@ -172,6 +184,9 @@ export default async function handler(request, response) {
     await adminDb.collection('users').doc(studentUid).set({
       facultyIds: FieldValue.arrayUnion(facultyUid),
       assignment: { level, hostel, wing, floor, assignedAt: new Date().toISOString(), assignedBy: claims.uid },
+    }, { merge: true })
+    await adminDb.collection('users').doc(facultyUid).set({
+      studentIds: FieldValue.arrayUnion(studentUid),
     }, { merge: true })
     await adminDb.collection('facultyAssignments').add({
       studentUid,
