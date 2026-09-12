@@ -17,6 +17,23 @@ export default async function handler(request, response) {
     requireAdmin(claims)
     const body = request.body || {}
 
+    if (request.method === 'POST' && body.entity === 'academic') {
+      const { collectionName, name, code = '', departmentId = '', branchId = '' } = body
+      if (!['branches', 'departments', 'classes'].includes(collectionName) || !String(name).trim()) {
+        return response.status(400).json({ error: 'A valid academic collection and name are required' })
+      }
+      const document = {
+        name: String(name).trim(),
+        code: String(code).trim(),
+        departmentId: String(departmentId).trim(),
+        branchId: String(branchId).trim(),
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: claims.uid,
+      }
+      const reference = await adminDb.collection(collectionName).add(document)
+      return response.status(201).json({ id: reference.id, ...document })
+    }
+
     if (request.method === 'POST') {
       const { email, password, name, role, phone = '', department = '', level = 'campus' } = body
       if (!email || !password || !name || !['student', 'faculty'].includes(role)) {

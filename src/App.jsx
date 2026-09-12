@@ -22,12 +22,14 @@ function formatTime(timestamp) {
 function App() {
   const [incidents, setIncidents] = useState([])
   const [users, setUsers] = useState([])
-  const [error, setError] = useState(firebaseConfigError)
+    const [error, setError] = useState(null)
   const [adminUser, setAdminUser] = useState(null)
   const [view, setView] = useState('overview')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [form, setForm] = useState({ email: '', password: '', name: '', role: 'faculty', phone: '', department: '', level: 'hostel' })
+    const [facultyForm, setFacultyForm] = useState(emptyFaculty)
+    const [studentForm, setStudentForm] = useState(emptyStudent)
+    const [academicForm, setAcademicForm] = useState(emptyAcademic)
   const [assignment, setAssignment] = useState({ studentUid: '', facultyUid: '', level: 'hostel', hostel: '', wing: '', floor: '' })
   const [notice, setNotice] = useState('')
 
