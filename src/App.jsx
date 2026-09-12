@@ -9,7 +9,12 @@ const emptyStudent = { email: '', password: '', name: '', phone: '', studentId: 
 const emptyAcademic = { collectionName: 'branches', name: '', code: '' }
 
 async function apiCall(token, method, body) {
-  const response = await fetch('/api/user-management', { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const options = { method, headers: { Authorization: `Bearer ${token}` } }
+  if (method !== 'GET' && method !== 'HEAD') {
+    options.headers['Content-Type'] = 'application/json'
+    options.body = JSON.stringify(body)
+  }
+  const response = await fetch('/api/user-management', options)
   const result = await response.json()
   if (!response.ok) throw new Error(result.error || 'Request failed')
   return result
