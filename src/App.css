@@ -89,6 +89,15 @@
   margin-top: 18px;
 }
 
+.nav-label {
+  margin: 24px 10px 8px;
+  color: #7f8ea3;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .nav-item,
 .primary-btn,
 .ghost-btn {
@@ -104,7 +113,13 @@
   text-align: left;
   padding: 12px 14px;
   transition: 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
+
+.nav-dot { width: 7px; height: 7px; border-radius: 50%; background: #536176; }
+.nav-item.active .nav-dot { background: #fb6b5b; box-shadow: 0 0 0 4px rgba(251, 107, 91, 0.12); }
 
 .nav-item.active,
 .nav-item:hover {
@@ -178,6 +193,10 @@
   font-size: 0.78rem;
   font-weight: 600;
 }
+
+.live-indicator { display: inline-flex; align-items: center; gap: 7px; }
+.live-indicator i { width: 7px; height: 7px; border-radius: 50%; background: #45d39c; }
+.subheading, .muted { color: #8b9ab0; }
 
 .error-banner {
   margin-bottom: 20px;
@@ -329,6 +348,9 @@ th {
   gap: 20px;
 }
 
+.form-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.form-columns label:first-child, .form-columns label:nth-child(2) { grid-column: span 2; }
+
 .form-panel {
   display: grid;
   gap: 14px;
@@ -374,6 +396,13 @@ th {
 
 .user-row strong { color: white; }
 .user-row small { margin-top: 4px; color: #94a3b8; }
+
+.directory-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.directory-section h3 { margin: 0 0 10px; color: #fff; font-size: 0.95rem; }
+.directory-section h3 span { color: #fb806d; margin-left: 5px; }
+.directory-row { padding: 10px 0; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+.directory-row strong, .directory-row small { display: block; }
+.directory-row small { margin-top: 3px; color: #94a3b8; }
 
 .assignment-help {
   color: #cbd5e1;
@@ -424,9 +453,13 @@ th {
 
   .content-grid,
   .stats-grid,
-  .management-grid {
+  .management-grid,
+  .directory-grid {
     grid-template-columns: 1fr;
   }
+
+  .form-columns { grid-template-columns: 1fr; }
+  .form-columns label:first-child, .form-columns label:nth-child(2) { grid-column: auto; }
 
   .topbar {
     flex-direction: column;

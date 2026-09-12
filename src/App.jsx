@@ -4,133 +4,77 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import './App.css'
 import { auth, db, firebaseConfigError } from './firebase'
 
-const apiCall = async (token, method, body) => {
-  const response = await fetch('/api/user-management', {
-    method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+const facultyDefaults = { email: '', password: '', name: '', phone: '', department: '', branchId: '', classId: '', level: 'L1' }
+const studentDefaults = { email: '', password: '', name: '', phone: '', studentId: '', department: '', branchId: '', classId: '', hostel: '', roomNumber: '' }
+const academicDefaults = { collectionName: 'branches', name: '', code: '', departmentId: '', branchId: '' }
+
+async function apiCall(token, method, body) {
+  const response = await fetch('/api/user-management', { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   const data = await response.json()
   if (!response.ok) throw new Error(data.error || 'Request failed')
   return data
 }
 
-function formatTime(timestamp) {
-  return timestamp?.toDate ? timestamp.toDate().toLocaleTimeString([], { minute: '2-digit', second: '2-digit' }) : 'Pending'
-}
-
 function App() {
-  const [incidents, setIncidents] = useState([])
   const [users, setUsers] = useState([])
-    const [error, setError] = useState(null)
+  const [incidents, setIncidents] = useState([])
+  const [academic, setAcademic] = useState({ branches: [], departments: [], classes: [] })
   const [adminUser, setAdminUser] = useState(null)
   const [view, setView] = useState('overview')
+  const [error, setError] = useState(firebaseConfigError)
+  const [notice, setNotice] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-    const [facultyForm, setFacultyForm] = useState(emptyFaculty)
-    const [studentForm, setStudentForm] = useState(emptyStudent)
-    const [academicForm, setAcademicForm] = useState(emptyAcademic)
-  const [assignment, setAssignment] = useState({ studentUid: '', facultyUid: '', level: 'hostel', hostel: '', wing: '', floor: '' })
-  const [notice, setNotice] = useState('')
+  const [facultyForm, setFacultyForm] = useState(facultyDefaults)
+  const [studentForm, setStudentForm] = useState(studentDefaults)
+  const [academicForm, setAcademicForm] = useState(academicDefaults)
 
   useEffect(() => {
-    if (!auth) {
-      setError(firebaseConfigError || 'Firebase is not configured for this deployment.')
-      return undefined
-    }
+    if (!auth) return undefined
     return onAuthStateChanged(auth, async (user) => {
       try {
         if (!user) return setAdminUser(null)
         const token = await user.getIdTokenResult(true)
-        if (token.claims.admin !== true) {
-          await signOut(auth)
-          return setError('This account is not an admin account.')
-        }
-        setAdminUser(user)
-        setError(null)
-      } catch (authError) {
-        setAdminUser(null)
-        setError(authError.message || 'Unable to load Firebase admin session.')
-      }
+        if (token.claims.admin !== true) { await signOut(auth); setError('This account is not an admin account.'); return }
+        setAdminUser(user); setError(null)
+      } catch (authError) { setAdminUser(null); setError(authError.message || 'Unable to load admin session.') }
     })
   }, [])
 
   useEffect(() => {
     if (!db || !adminUser) return undefined
-    const stopIncidents = onSnapshot(collection(db, 'incidents'), (snapshot) => setIncidents(snapshot.docs.map((document) => ({ id: document.id, ...document.data() }))), (snapshotError) => setError(snapshotError.message))
-    const stopUsers = onSnapshot(collection(db, 'users'), (snapshot) => setUsers(snapshot.docs.map((document) => ({ uid: document.id, ...document.data() }))), (snapshotError) => setError(snapshotError.message))
-    return () => { stopIncidents(); stopUsers() }
+    const sources = [['users', setUsers], ['incidents', setIncidents], ['branches', (items) => setAcademic((current) => ({ ...current, branches: items }))], ['departments', (items) => setAcademic((current) => ({ ...current, departments: items }))], ['classes', (items) => setAcademic((current) => ({ ...current, classes: items }))]]
+    const stops = sources.map(([name, setter]) => onSnapshot(collection(db, name), (snapshot) => setter(snapshot.docs.map((document) => ({ id: document.id, ...document.data() }))), (snapshotError) => setError(`Could not load ${name}: ${snapshotError.message}`)))
+    return () => stops.forEach((stop) => stop())
   }, [adminUser])
 
-  async function handleLogin(event) {
-    event.preventDefault(); setError(null)
-    if (!auth) return setError('Firebase is not configured. Add the VITE_FIREBASE_* variables in Vercel and redeploy.')
-    try { await signInWithEmailAndPassword(auth, email.trim(), password) } catch (loginError) { setError(loginError.message) }
+  async function login(event) { event.preventDefault(); setError(null); try { await signInWithEmailAndPassword(auth, email.trim(), password) } catch (loginError) { setError(loginError.message || 'Unable to sign in.') } }
+  async function createUser(event, role) {
+    event.preventDefault(); setError(''); setNotice('')
+    const form = role === 'faculty' ? facultyForm : studentForm
+    try { await apiCall(await adminUser.getIdToken(), 'POST', { ...form, role }); setNotice(`${role === 'faculty' ? 'Faculty' : 'Student'} account created.`); role === 'faculty' ? setFacultyForm(facultyDefaults) : setStudentForm(studentDefaults) } catch (requestError) { setError(requestError.message) }
   }
-
-  async function handleCreateUser(event) {
-    event.preventDefault(); setNotice('')
-    try {
-      await apiCall(await adminUser.getIdToken(), 'POST', form)
-      setNotice(`${form.role} account created. Share its login credentials securely.`)
-      setForm({ email: '', password: '', name: '', role: 'faculty', phone: '', department: '', level: 'hostel' })
-    } catch (requestError) { setError(requestError.message) }
+  async function createAcademic(event) {
+    event.preventDefault(); setError(''); setNotice('')
+    try { await apiCall(await adminUser.getIdToken(), 'POST', { ...academicForm, entity: 'academic' }); setNotice('Academic record created.'); setAcademicForm(academicDefaults) } catch (requestError) { setError(requestError.message) }
   }
-
-  async function handleAssignment(event) {
-    event.preventDefault(); setNotice('')
-    try {
-      await apiCall(await adminUser.getIdToken(), 'PATCH', assignment)
-      setNotice('Faculty assignment saved.')
-    } catch (requestError) { setError(requestError.message) }
-  }
-
-  if (!adminUser) return <Login error={error} email={email} password={password} setEmail={setEmail} setPassword={setPassword} onSubmit={handleLogin} />
-
+  if (!adminUser) return <Login error={error} email={email} password={password} setEmail={setEmail} setPassword={setPassword} onSubmit={login} />
   const faculty = users.filter((user) => user.role === 'faculty')
   const students = users.filter((user) => user.role === 'student')
-  const activeIncidents = incidents.filter((incident) => ['ringing', 'answered'].includes(incident.status))
-  const answeredIncidents = incidents.filter((incident) => incident.status === 'answered')
-  const facultyById = Object.fromEntries(faculty.map((user) => [user.uid, user]))
-
-  return <div className="dashboard-shell">
-    <aside className="sidebar">
-      <div className="brand-block"><div className="brand-icon">SOS</div><div><h2>Emergency Desk</h2><small>Campus Control</small></div></div>
-      <nav className="nav">
-        <button className={`nav-item ${view === 'overview' ? 'active' : ''}`} onClick={() => setView('overview')}>Overview</button>
-        <button className={`nav-item ${view === 'users' ? 'active' : ''}`} onClick={() => setView('users')}>Users</button>
-        <button className={`nav-item ${view === 'assignments' ? 'active' : ''}`} onClick={() => setView('assignments')}>Faculty assignments</button>
-      </nav>
-      <div className="sidebar-card"><span>System</span><strong>{error ? 'Needs attention' : 'Live'}</strong><small>Firestore connected</small></div>
-    </aside>
-    <main className="main-panel">
-      <header className="topbar"><div><p className="eyebrow">Admin dashboard</p><h1>{view === 'overview' ? 'Emergency command center' : view === 'users' ? 'User management' : 'Level-wise assignments'}</h1></div><div className="topbar-actions"><span className="live-indicator">Live Firestore</span><button className="ghost-btn" onClick={() => signOut(auth)}>Sign out</button></div></header>
-      {error && <div className="error-banner">{error}</div>}
-      {notice && <div className="success-banner">{notice}</div>}
-      {view === 'overview' && <Overview incidents={incidents} activeIncidents={activeIncidents} answeredIncidents={answeredIncidents} faculty={faculty} facultyById={facultyById} />}
-      {view === 'users' && <UsersView users={users} form={form} setForm={setForm} onSubmit={handleCreateUser} />}
-      {view === 'assignments' && <AssignmentsView students={students} faculty={faculty} assignment={assignment} setAssignment={setAssignment} onSubmit={handleAssignment} />}
-    </main>
-  </div>
+  const active = incidents.filter((incident) => ['ringing', 'answered'].includes(incident.status))
+  const titles = { overview: 'Operations overview', faculty: 'Faculty management', students: 'Student management', academic: 'Academic structure', assignments: 'Faculty assignments' }
+  return <div className="dashboard-shell"><aside className="sidebar"><div className="brand-block"><div className="brand-icon">SOS</div><div><h2>SOS Campus</h2><small>Administration</small></div></div><div className="nav-label">Workspace</div><nav className="nav"><NavButton active={view === 'overview'} onClick={() => setView('overview')}>Overview</NavButton><NavButton active={view === 'faculty'} onClick={() => setView('faculty')}>Faculty management</NavButton><NavButton active={view === 'students'} onClick={() => setView('students')}>Student management</NavButton><NavButton active={view === 'academic'} onClick={() => setView('academic')}>Branches, departments & classes</NavButton><NavButton active={view === 'assignments'} onClick={() => setView('assignments')}>Faculty assignments</NavButton></nav><div className="sidebar-card"><span>System status</span><strong>{error ? 'Needs attention' : 'Operational'}</strong><small>Live Firestore data</small></div></aside><main className="main-panel"><header className="topbar"><div><p className="eyebrow">Admin console</p><h1>{titles[view]}</h1><p className="subheading">Manage campus access, academic structure, and emergency response coverage.</p></div><div className="topbar-actions"><span className="live-indicator"><i /> Live</span><button className="ghost-btn" onClick={() => signOut(auth)}>Sign out</button></div></header>{error && <div className="error-banner">{error}</div>}{notice && <div className="success-banner">{notice}</div>}{view === 'overview' && <Overview incidents={incidents} active={active} faculty={faculty} students={students} />}{view === 'faculty' && <UserManagement kind="faculty" users={faculty} form={facultyForm} setForm={setFacultyForm} onSubmit={(event) => createUser(event, 'faculty')} academic={academic} />}{view === 'students' && <UserManagement kind="student" users={students} form={studentForm} setForm={setStudentForm} onSubmit={(event) => createUser(event, 'student')} academic={academic} />}{view === 'academic' && <AcademicManagement form={academicForm} setForm={setAcademicForm} onSubmit={createAcademic} academic={academic} />}{view === 'assignments' && <Assignments users={users} adminUser={adminUser} />}</main></div>
 }
 
-function Login({ error, email, password, setEmail, setPassword, onSubmit }) {
-  return <main className="login-shell"><form className="login-card" onSubmit={onSubmit}><div className="brand-icon">SOS</div><p className="eyebrow">Restricted access</p><h1>Admin sign in</h1><p>Use a Firebase account with the <code>admin: true</code> claim.</p>{error && <div className="error-banner">{error}</div>}<label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label><button className="primary-btn" type="submit">Sign in</button></form></main>
-}
-
-function Overview({ incidents, activeIncidents, answeredIncidents, faculty, facultyById }) {
-  return <><section className="stats-grid"><StatCard label="Active incidents" value={activeIncidents.length} tone="danger" /><StatCard label="Answered" value={answeredIncidents.length} tone="success" /><StatCard label="Total incidents" value={incidents.length} tone="warning" /><StatCard label="Faculty" value={faculty.length} tone="success" /></section><section className="content-grid"><div className="panel large-panel"><div className="panel-header"><h3>Live incidents</h3><span className="record-count">{incidents.length} records</span></div><div className="table-wrap"><table><thead><tr><th>Incident</th><th>Student</th><th>Location</th><th>Status</th><th>Responder</th><th>Time</th></tr></thead><tbody>{incidents.length === 0 ? <tr><td colSpan="6" className="empty-state">No incidents in Firestore.</td></tr> : incidents.map((incident) => <tr key={incident.id}><td>{incident.id}</td><td>{incident.studentName || 'Unknown'}</td><td>{[incident.hostel, incident.wing, incident.roomNumber].filter(Boolean).join(', ') || 'Not provided'}</td><td><span className={`status-badge ${incident.status || 'unknown'}`}>{incident.status || 'unknown'}</span></td><td>{facultyById[incident.answeredBy]?.name || incident.answeredBy || 'Unassigned'}</td><td>{formatTime(incident.createdAt)}</td></tr>)}</tbody></table></div></div><div className="panel side-panel"><div className="panel-header"><h3>Faculty status</h3><span className="record-count">{faculty.length}</span></div>{faculty.length === 0 ? <p className="empty-state">No faculty accounts.</p> : faculty.map((user) => <div className="responder-item" key={user.uid}><div className="dot" /><div><strong>{user.name || user.email}</strong><small>{user.level || 'Faculty'}</small></div><span className="status-pill">{user.status || 'Available'}</span></div>)}</div></section></>
-}
-
-function UsersView({ users, form, setForm, onSubmit }) {
-  const change = (field, value) => setForm((current) => ({ ...current, [field]: value }))
-  return <section className="management-grid"><form className="panel form-panel" onSubmit={onSubmit}><div className="panel-header"><h3>Create user</h3></div><label>Name<input value={form.name} onChange={(event) => change('name', event.target.value)} required /></label><label>Email<input type="email" value={form.email} onChange={(event) => change('email', event.target.value)} required /></label><label>Temporary password<input type="password" minLength="6" value={form.password} onChange={(event) => change('password', event.target.value)} required /></label><label>Role<select value={form.role} onChange={(event) => change('role', event.target.value)}><option value="faculty">Faculty</option><option value="student">Student</option></select></label><label>Phone<input value={form.phone} onChange={(event) => change('phone', event.target.value)} /></label><label>Department / class<input value={form.department} onChange={(event) => change('department', event.target.value)} /></label><label>Default level<select value={form.level} onChange={(event) => change('level', event.target.value)}><option value="campus">Campus</option><option value="hostel">Hostel</option><option value="wing">Wing</option><option value="floor">Floor</option></select></label><button className="primary-btn" type="submit">Create Firebase user</button></form><div className="panel"><div className="panel-header"><h3>Registered users</h3><span className="record-count">{users.length}</span></div><div className="user-list">{users.map((user) => <div className="user-row" key={user.uid}><div><strong>{user.name || user.email}</strong><small>{user.email} · {user.role} · {user.level || 'campus'}</small></div><span className="status-pill">{user.role}</span></div>)}</div></div></section>
-}
-
-function AssignmentsView({ students, faculty, assignment, setAssignment, onSubmit }) {
-  const change = (field, value) => setAssignment((current) => ({ ...current, [field]: value }))
-  return <section className="management-grid"><form className="panel form-panel" onSubmit={onSubmit}><div className="panel-header"><h3>Assign faculty</h3></div><label>Student<select value={assignment.studentUid} onChange={(event) => change('studentUid', event.target.value)} required><option value="">Select student</option>{students.map((user) => <option key={user.uid} value={user.uid}>{user.name || user.email}</option>)}</select></label><label>Faculty<select value={assignment.facultyUid} onChange={(event) => change('facultyUid', event.target.value)} required><option value="">Select faculty</option>{faculty.map((user) => <option key={user.uid} value={user.uid}>{user.name || user.email}</option>)}</select></label><label>Assignment level<select value={assignment.level} onChange={(event) => change('level', event.target.value)}><option value="campus">Campus</option><option value="hostel">Hostel</option><option value="wing">Wing</option><option value="floor">Floor</option></select></label><label>Hostel<input value={assignment.hostel} onChange={(event) => change('hostel', event.target.value)} /></label><label>Wing<input value={assignment.wing} onChange={(event) => change('wing', event.target.value)} /></label><label>Floor<input value={assignment.floor} onChange={(event) => change('floor', event.target.value)} /></label><button className="primary-btn" type="submit">Save assignment</button></form><div className="panel assignment-help"><h3>Assignment hierarchy</h3><p>Campus covers every student. Hostel, wing, and floor assignments are stored on the student record and also in the facultyAssignments collection.</p><p>A student SOS includes the assigned faculty IDs. The faculty responder panel only receives incidents containing that faculty UID.</p></div></section>
-}
-
+function NavButton({ active, onClick, children }) { return <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}><span className="nav-dot" />{children}</button> }
+function Login({ error, email, password, setEmail, setPassword, onSubmit }) { return <main className="login-shell"><form className="login-card" onSubmit={onSubmit}><div className="brand-icon">SOS</div><p className="eyebrow">Restricted access</p><h1>Welcome back</h1><p className="muted">Sign in with an administrator account to continue.</p>{error && <div className="error-banner">{error}</div>}<Field label="Email"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></Field><Field label="Password"><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></Field><button className="primary-btn" type="submit">Sign in to console</button></form></main> }
+function Overview({ incidents, active, faculty, students }) { return <><section className="stats-grid"><StatCard label="Active incidents" value={active.length} tone="danger" /><StatCard label="Faculty" value={faculty.length} tone="blue" /><StatCard label="Students" value={students.length} tone="teal" /><StatCard label="Total incidents" value={incidents.length} tone="amber" /></section><section className="content-grid"><div className="panel large-panel"><PanelHeader title="Recent incidents" count={`${incidents.length} records`} /><div className="table-wrap"><table><thead><tr><th>Student</th><th>Location</th><th>Status</th></tr></thead><tbody>{incidents.length === 0 ? <tr><td colSpan="3" className="empty-state">No incidents have been reported.</td></tr> : incidents.slice(0, 12).map((incident) => <tr key={incident.id}><td><strong>{incident.studentName || 'Unknown student'}</strong><small>{incident.studentPhone || 'No contact'}</small></td><td>{[incident.hostel, incident.wing, incident.roomNumber].filter(Boolean).join(', ') || 'Not provided'}</td><td><span className={`status-badge ${incident.status || 'unknown'}`}>{incident.status || 'unknown'}</span></td></tr>)}</tbody></table></div></div><div className="panel"><PanelHeader title="Response team" count={`${faculty.length} members`} />{faculty.length === 0 ? <p className="empty-state">Create faculty accounts to build the response team.</p> : faculty.slice(0, 8).map((user) => <div className="responder-item" key={user.uid}><div className="dot" /><div><strong>{user.name || user.email}</strong><small>{user.department || 'Department not set'} · {user.level || 'L1'}</small></div><span className="status-pill">Active</span></div>)}</div></section></> }
+function UserManagement({ kind, users, form, setForm, onSubmit, academic }) { const faculty = kind === 'faculty'; const change = (field, value) => setForm((current) => ({ ...current, [field]: value })); return <section className="management-grid"><form className="panel form-panel" onSubmit={onSubmit}><PanelHeader title={`Create ${kind} account`} count="Required fields marked *" /><div className="form-columns"><Field label="Full name *"><input value={form.name} onChange={(event) => change('name', event.target.value)} required /></Field><Field label="Email *"><input type="email" value={form.email} onChange={(event) => change('email', event.target.value)} required /></Field><Field label="Temporary password *"><input type="password" minLength="6" value={form.password} onChange={(event) => change('password', event.target.value)} required /></Field><Field label="Phone"><input value={form.phone} onChange={(event) => change('phone', event.target.value)} /></Field>{faculty && <Field label="Faculty level"><select value={form.level} onChange={(event) => change('level', event.target.value)}>{['L1', 'L2', 'L3', 'L4', 'L5'].map((level) => <option key={level}>{level}</option>)}</select></Field>}{!faculty && <Field label="Student ID *"><input value={form.studentId} onChange={(event) => change('studentId', event.target.value)} required /></Field>}<Field label="Department"><AcademicSelect value={form.department} onChange={(value) => change('department', value)} items={academic.departments} placeholder="Select department" /></Field><Field label="Branch"><AcademicSelect value={form.branchId} onChange={(value) => change('branchId', value)} items={academic.branches} placeholder="Select branch" /></Field><Field label="Class"><AcademicSelect value={form.classId} onChange={(value) => change('classId', value)} items={academic.classes} placeholder="Select class" /></Field>{!faculty && <><Field label="Hostel"><input value={form.hostel} onChange={(event) => change('hostel', event.target.value)} /></Field><Field label="Room number"><input value={form.roomNumber} onChange={(event) => change('roomNumber', event.target.value)} /></Field></>}</div><button className="primary-btn" type="submit">Create {kind} account</button></form><UserList users={users} kind={kind} /></section> }
+function AcademicManagement({ form, setForm, onSubmit, academic }) { const labels = { branches: 'Branch', departments: 'Department', classes: 'Class' }; const change = (field, value) => setForm((current) => ({ ...current, [field]: value })); return <section className="management-grid"><form className="panel form-panel" onSubmit={onSubmit}><PanelHeader title="Add academic record" count="Used across account assignment" /><Field label="Record type"><select value={form.collectionName} onChange={(event) => change('collectionName', event.target.value)}>{Object.entries(labels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></Field><Field label={`${labels[form.collectionName]} name *`}><input value={form.name} onChange={(event) => change('name', event.target.value)} required /></Field><Field label="Code"><input value={form.code} onChange={(event) => change('code', event.target.value)} placeholder="e.g. CSE" /></Field>{form.collectionName === 'classes' && <><Field label="Department"><AcademicSelect value={form.departmentId} onChange={(value) => change('departmentId', value)} items={academic.departments} placeholder="Select department" /></Field><Field label="Branch"><AcademicSelect value={form.branchId} onChange={(value) => change('branchId', value)} items={academic.branches} placeholder="Select branch" /></Field></>}<button className="primary-btn" type="submit">Add {labels[form.collectionName].toLowerCase()}</button></form><div className="panel"><PanelHeader title="Academic directory" count="Live records" /><div className="directory-grid">{Object.entries(labels).map(([name, label]) => <div className="directory-section" key={name}><h3>{label}s <span>{academic[name].length}</span></h3>{academic[name].map((item) => <div className="directory-row" key={item.id}><strong>{item.name}</strong><small>{item.code || 'No code'}</small></div>)}{academic[name].length === 0 && <p className="muted">No {label.toLowerCase()}s yet.</p>}</div>)}</div></div></section> }
+function Assignments({ users, adminUser }) { const students = users.filter((user) => user.role === 'student'); const faculty = users.filter((user) => user.role === 'faculty'); const [form, setForm] = useState({ studentUid: '', facultyUid: '', level: 'campus', hostel: '', wing: '', floor: '' }); const [message, setMessage] = useState(''); async function submit(event) { event.preventDefault(); setMessage(''); try { await apiCall(await adminUser.getIdToken(), 'PATCH', form); setMessage('Faculty assignment saved.'); setForm((current) => ({ ...current, studentUid: '', facultyUid: '' })) } catch (assignmentError) { setMessage(assignmentError.message) } } return <section className="management-grid"><form className="panel form-panel" onSubmit={submit}><PanelHeader title="Assign faculty" count="Links a responder to a student" /><Field label="Student"><select value={form.studentUid} onChange={(event) => setForm({ ...form, studentUid: event.target.value })} required><option value="">Select student</option>{students.map((student) => <option key={student.uid} value={student.uid}>{student.name || student.email}</option>)}</select></Field><Field label="Faculty"><select value={form.facultyUid} onChange={(event) => setForm({ ...form, facultyUid: event.target.value })} required><option value="">Select faculty</option>{faculty.map((member) => <option key={member.uid} value={member.uid}>{member.name || member.email}</option>)}</select></Field><Field label="Coverage level"><select value={form.level} onChange={(event) => setForm({ ...form, level: event.target.value })}><option value="campus">Campus</option><option value="hostel">Hostel</option><option value="wing">Wing</option><option value="floor">Floor</option></select></Field><Field label="Hostel"><input value={form.hostel} onChange={(event) => setForm({ ...form, hostel: event.target.value })} /></Field><Field label="Wing"><input value={form.wing} onChange={(event) => setForm({ ...form, wing: event.target.value })} /></Field><Field label="Floor"><input value={form.floor} onChange={(event) => setForm({ ...form, floor: event.target.value })} /></Field><button className="primary-btn" type="submit">Save assignment</button>{message && <p className="muted">{message}</p>}</form><div className="panel"><PanelHeader title="Current student placement" count={`${students.length} students`} /><div className="table-wrap"><table><thead><tr><th>Student</th><th>Branch</th><th>Class</th><th>Faculty links</th></tr></thead><tbody>{students.map((student) => <tr key={student.uid}><td>{student.name || student.email}</td><td>{student.branchId || 'Not assigned'}</td><td>{student.classId || 'Not assigned'}</td><td>{student.facultyIds?.length || 0}</td></tr>)}</tbody></table></div></div></section> }
+function UserList({ users, kind }) { return <div className="panel"><PanelHeader title={`Registered ${kind}`} count={`${users.length} records`} />{users.length === 0 ? <p className="empty-state">No {kind} accounts found in Firestore.</p> : <div className="user-list">{users.map((user) => <div className="user-row" key={user.uid}><div><strong>{user.name || user.email}</strong><small>{user.email} · {user.department || 'Department not set'} · {user.branchId || 'Branch not set'}</small></div><span className="status-pill">{kind === 'faculty' ? user.level || 'L1' : user.studentId || 'Student'}</span></div>)}</div>}</div> }
+function AcademicSelect({ value, onChange, items, placeholder }) { return <select value={value} onChange={(event) => onChange(event.target.value)}><option value="">{placeholder}</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select> }
+function Field({ label, children }) { return <label>{label}{children}</label> }
+function PanelHeader({ title, count }) { return <div className="panel-header"><h2>{title}</h2><span className="record-count">{count}</span></div> }
 function StatCard({ label, value, tone }) { return <article className={`stat-card ${tone}`}><span>{label}</span><strong>{value}</strong></article> }
 export default App

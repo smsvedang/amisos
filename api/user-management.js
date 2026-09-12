@@ -35,7 +35,7 @@ export default async function handler(request, response) {
     }
 
     if (request.method === 'POST') {
-      const { email, password, name, role, phone = '', department = '', level = 'campus' } = body
+      const { email, password, name, role, phone = '', department = '', level = 'L1', branchId = '', classId = '', studentId = '', hostel = '', roomNumber = '' } = body
       if (!email || !password || !name || !['student', 'faculty'].includes(role)) {
         return response.status(400).json({ error: 'email, password, name, and role are required' })
       }
@@ -48,6 +48,11 @@ export default async function handler(request, response) {
         role,
         department: String(department).trim(),
         level: String(level).trim(),
+        branchId: String(branchId).trim(),
+        classId: String(classId).trim(),
+        studentId: String(studentId).trim(),
+        hostel: String(hostel).trim(),
+        roomNumber: String(roomNumber).trim(),
         facultyIds: [],
         createdAt: FieldValue.serverTimestamp(),
       })
