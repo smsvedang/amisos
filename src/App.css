@@ -397,6 +397,11 @@ th {
 .user-row strong { color: white; }
 .user-row small { margin-top: 4px; color: #94a3b8; }
 
+.row-actions { display: flex; align-items: center; gap: 8px; }
+.icon-btn { border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 7px; padding: 5px 8px; background: rgba(148, 163, 184, 0.08); color: #dbe3ee; cursor: pointer; }
+.icon-btn:hover { background: rgba(148, 163, 184, 0.18); }
+.danger-btn { color: #fca5a5; }
+
 .directory-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .directory-section h3 { margin: 0 0 10px; color: #fff; font-size: 0.95rem; }
 .directory-section h3 span { color: #fb806d; margin-left: 5px; }

@@ -49,6 +49,8 @@ export default async function handler(request, response) {
         status: incident.status || 'ringing',
         hostel: String(incident.hostel || ''),
         roomNumber: String(incident.roomNumber || ''),
+        latitude: String(incident.latitude ?? ''),
+        longitude: String(incident.longitude ?? ''),
       },
       android: { priority: 'high' },
     })

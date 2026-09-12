@@ -10,12 +10,39 @@ function requireAdmin(claims) {
 }
 
 export default async function handler(request, response) {
-  if (!['POST', 'PATCH'].includes(request.method)) return methodNotAllowed(response)
+  if (!['POST', 'PATCH', 'DELETE'].includes(request.method)) return methodNotAllowed(response)
 
   try {
     const claims = await verifyBearerToken(request)
     requireAdmin(claims)
     const body = request.body || {}
+
+    if (request.method === 'DELETE') {
+      const { collectionName, id } = body
+      if (!['users', 'branches', 'departments', 'classes', 'facultyAssignments'].includes(collectionName) || !id) {
+        return response.status(400).json({ error: 'A valid collection and record id are required' })
+      }
+      if (collectionName === 'users') await adminAuth.deleteUser(id)
+      await adminDb.collection(collectionName).doc(id).delete()
+      return response.status(200).json({ ok: true })
+    }
+
+    if (request.method === 'PATCH' && body.entity === 'academic') {
+      const { collectionName, id, name, code = '', departmentId = '', branchId = '' } = body
+      if (!['branches', 'departments', 'classes'].includes(collectionName) || !id || !String(name).trim()) {
+        return response.status(400).json({ error: 'A valid academic collection, id, and name are required' })
+      }
+      await adminDb.collection(collectionName).doc(id).set({ name: String(name).trim(), code: String(code).trim(), departmentId: String(departmentId).trim(), branchId: String(branchId).trim(), updatedAt: FieldValue.serverTimestamp(), updatedBy: claims.uid }, { merge: true })
+      return response.status(200).json({ ok: true })
+    }
+
+    if (request.method === 'PATCH' && body.entity === 'user') {
+      const { id, name, phone = '', department = '', level = 'L1', branchId = '', classId = '', studentId = '', hostel = '', roomNumber = '' } = body
+      if (!id || !String(name).trim()) return response.status(400).json({ error: 'A user id and name are required' })
+      await adminAuth.updateUser(id, { displayName: String(name).trim(), phoneNumber: String(phone).trim() || undefined })
+      await adminDb.collection('users').doc(id).set({ name: String(name).trim(), phone: String(phone).trim(), department: String(department).trim(), level: String(level).trim(), branchId: String(branchId).trim(), classId: String(classId).trim(), studentId: String(studentId).trim(), hostel: String(hostel).trim(), roomNumber: String(roomNumber).trim(), updatedAt: FieldValue.serverTimestamp(), updatedBy: claims.uid }, { merge: true })
+      return response.status(200).json({ ok: true })
+    }
 
     if (request.method === 'POST' && body.entity === 'academic') {
       const { collectionName, name, code = '', departmentId = '', branchId = '' } = body
