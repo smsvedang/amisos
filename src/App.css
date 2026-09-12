@@ -188,6 +188,15 @@
   color: #fecaca;
 }
 
+.success-banner {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  border-radius: 12px;
+  background: rgba(20, 83, 45, 0.35);
+  color: #bbf7d0;
+}
+
 .ghost-btn {
   background: rgba(148, 163, 184, 0.08);
   color: #e2e8f0;
@@ -314,6 +323,65 @@ th {
   text-align: center;
 }
 
+.management-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 20px;
+}
+
+.form-panel {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.form-panel label {
+  display: grid;
+  gap: 7px;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+}
+
+.form-panel input,
+.form-panel select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  background: #0f172a;
+  color: white;
+}
+
+.user-list {
+  display: grid;
+  gap: 4px;
+}
+
+.user-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.user-row strong,
+.user-row small {
+  display: block;
+}
+
+.user-row strong { color: white; }
+.user-row small { margin-top: 4px; color: #94a3b8; }
+
+.assignment-help {
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+
+.assignment-help h3 { color: white; }
+
 .responder-list {
   display: flex;
   flex-direction: column;
@@ -355,7 +423,8 @@ th {
   }
 
   .content-grid,
-  .stats-grid {
+  .stats-grid,
+  .management-grid {
     grid-template-columns: 1fr;
   }
 
