@@ -2,35 +2,18 @@ import { getApps, initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
-const requiredKeys = [
-  'VITE_FIREBASE_API_KEY',
-  'VITE_FIREBASE_AUTH_DOMAIN',
-  'VITE_FIREBASE_PROJECT_ID',
-  'VITE_FIREBASE_STORAGE_BUCKET',
-  'VITE_FIREBASE_MESSAGING_SENDER_ID',
-  'VITE_FIREBASE_APP_ID',
-]
-
-const missingKeys = requiredKeys.filter((key) => !import.meta.env[key])
-
-if (missingKeys.length) {
-  console.error(`Firebase admin panel configuration is incomplete: ${missingKeys.join(', ')}`)
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyAb8Y26Yh5CNBFj_XaD-6bfVcwgLUjnDIc',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'emergency-sos-792e6.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'emergency-sos-792e6',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'emergency-sos-792e6.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '368386996468',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:368386996468:web:37f3ce3183e97d894846a1',
 }
 
-export const firebaseConfigError = missingKeys.length
-  ? `Missing Vercel environment variables: ${missingKeys.join(', ')}`
-  : null
+export const firebaseConfigError = null
 
-const app = firebaseConfigError
-  ? null
-  : getApps()[0] || initializeApp({
-      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: import.meta.env.VITE_FIREBASE_APP_ID,
-    })
+const app = getApps()[0] || initializeApp(firebaseConfig)
 
 export const db = app ? getFirestore(app) : null
 export const auth = app ? getAuth(app) : null
