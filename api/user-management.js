@@ -46,22 +46,27 @@ export default async function handler(request, response) {
         return response.status(400).json({ error: 'email, password, name, and role are required' })
       }
       const userRecord = await adminAuth.createUser({ email: email.trim(), password, displayName: name.trim() })
-      await adminDb.collection('users').doc(userRecord.uid).set({
-        uid: userRecord.uid,
-        email: email.trim(),
-        name: name.trim(),
-        phone: String(phone).trim(),
-        role,
-        department: String(department).trim(),
-        level: String(level).trim(),
-        branchId: String(branchId).trim(),
-        classId: String(classId).trim(),
-        studentId: String(studentId).trim(),
-        hostel: String(hostel).trim(),
-        roomNumber: String(roomNumber).trim(),
-        facultyIds: [],
-        createdAt: FieldValue.serverTimestamp(),
-      })
+      try {
+        await adminDb.collection('users').doc(userRecord.uid).set({
+          uid: userRecord.uid,
+          email: email.trim(),
+          name: name.trim(),
+          phone: String(phone).trim(),
+          role,
+          department: String(department).trim(),
+          level: String(level).trim(),
+          branchId: String(branchId).trim(),
+          classId: String(classId).trim(),
+          studentId: String(studentId).trim(),
+          hostel: String(hostel).trim(),
+          roomNumber: String(roomNumber).trim(),
+          facultyIds: [],
+          createdAt: FieldValue.serverTimestamp(),
+        })
+      } catch (firestoreError) {
+        await adminAuth.deleteUser(userRecord.uid).catch(() => undefined)
+        throw firestoreError
+      }
       return response.status(201).json({ uid: userRecord.uid, email: userRecord.email, role })
     }
 

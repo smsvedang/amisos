@@ -9,11 +9,21 @@ function required(name) {
   return value
 }
 
+function privateKeyFromEnvironment() {
+  const value = required('FIREBASE_PRIVATE_KEY').trim()
+  const withoutWrappingQuotes = value.replace(/^(['"])(.*)\1$/s, '$2')
+  const privateKey = withoutWrappingQuotes.replace(/\\n/g, '\n').replace(/\r\n/g, '\n').trim()
+  if (!privateKey.includes('-----BEGIN PRIVATE KEY-----') || !privateKey.includes('-----END PRIVATE KEY-----')) {
+    throw new Error('FIREBASE_PRIVATE_KEY must contain a complete PEM private key')
+  }
+  return privateKey
+}
+
 const adminApp = getApps()[0] || initializeApp({
   credential: cert({
-    projectId: required('FIREBASE_PROJECT_ID'),
-    clientEmail: required('FIREBASE_CLIENT_EMAIL'),
-    privateKey: required('FIREBASE_PRIVATE_KEY').replace(/\\n/g, '\n'),
+    projectId: required('FIREBASE_PROJECT_ID').trim(),
+    clientEmail: required('FIREBASE_CLIENT_EMAIL').trim(),
+    privateKey: privateKeyFromEnvironment(),
   }),
 })
 
@@ -42,9 +52,12 @@ export function methodNotAllowed(response) {
 }
 
 export function sendError(response, error) {
-  const statusCode = error.statusCode || 500
+  const statusCode = error.statusCode || (error.code === 5 ? 503 : 500)
+  const message = error.code === 5
+    ? 'Firestore database not found. Create the (default) Firestore database in project emergency-sos-792e6 and verify FIREBASE_PROJECT_ID in Vercel.'
+    : error.message
   console.error('[api error]', error)
   response.status(statusCode).json({
-    error: statusCode === 500 ? (error.message || 'Internal server error') : error.message,
+    error: message || 'Internal server error',
   })
 }
