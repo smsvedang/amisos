@@ -47,12 +47,10 @@ export default async function handler(request, response) {
 
     const result = await adminMessaging.sendEachForMulticast({
       tokens,
-      notification: {
-        title: 'SOS emergency alert',
-        body: `${incident.studentName || 'A student'} needs emergency assistance`,
-      },
       data: {
         incidentId,
+        title: 'SOS emergency alert',
+        body: `${incident.studentName || 'A student'} needs emergency assistance`,
         status: incident.status || 'ringing',
         facultyName: String(facultySnapshot.docs[0]?.data().name || 'Faculty'),
         hostel: String(incident.hostel || ''),
@@ -62,17 +60,6 @@ export default async function handler(request, response) {
       },
       android: {
         priority: 'high',
-        notification: {
-          channelId: 'sos_alerts',
-          priority: 'max',
-          sound: 'default',
-          defaultSound: true,
-          defaultVibrateTimings: true,
-          visibility: 'public',
-          notificationCount: 1,
-          clickAction: 'FLUTTER_NOTIFICATION_CLICK',
-          fullScreenIntent: true,
-        },
       },
     })
 
