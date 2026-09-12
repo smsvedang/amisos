@@ -32,16 +32,24 @@ function App() {
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
-    if (!auth) return undefined
+    if (!auth) {
+      setError(firebaseConfigError || 'Firebase is not configured for this deployment.')
+      return undefined
+    }
     return onAuthStateChanged(auth, async (user) => {
-      if (!user) return setAdminUser(null)
-      const token = await user.getIdTokenResult(true)
-      if (token.claims.admin !== true) {
-        await signOut(auth)
-        return setError('This account is not an admin account.')
+      try {
+        if (!user) return setAdminUser(null)
+        const token = await user.getIdTokenResult(true)
+        if (token.claims.admin !== true) {
+          await signOut(auth)
+          return setError('This account is not an admin account.')
+        }
+        setAdminUser(user)
+        setError(null)
+      } catch (authError) {
+        setAdminUser(null)
+        setError(authError.message || 'Unable to load Firebase admin session.')
       }
-      setAdminUser(user)
-      setError(null)
     })
   }, [])
 
@@ -54,6 +62,7 @@ function App() {
 
   async function handleLogin(event) {
     event.preventDefault(); setError(null)
+    if (!auth) return setError('Firebase is not configured. Add the VITE_FIREBASE_* variables in Vercel and redeploy.')
     try { await signInWithEmailAndPassword(auth, email.trim(), password) } catch (loginError) { setError(loginError.message) }
   }
 

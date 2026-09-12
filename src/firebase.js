@@ -13,6 +13,10 @@ const requiredKeys = [
 
 const missingKeys = requiredKeys.filter((key) => !import.meta.env[key])
 
+if (missingKeys.length) {
+  console.error(`Firebase admin panel configuration is incomplete: ${missingKeys.join(', ')}`)
+}
+
 export const firebaseConfigError = missingKeys.length
   ? `Missing Vercel environment variables: ${missingKeys.join(', ')}`
   : null
