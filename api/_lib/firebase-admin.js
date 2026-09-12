@@ -43,5 +43,8 @@ export function methodNotAllowed(response) {
 
 export function sendError(response, error) {
   const statusCode = error.statusCode || 500
-  response.status(statusCode).json({ error: statusCode === 500 ? 'Internal server error' : error.message })
+  console.error('[api error]', error)
+  response.status(statusCode).json({
+    error: statusCode === 500 ? (error.message || 'Internal server error') : error.message,
+  })
 }

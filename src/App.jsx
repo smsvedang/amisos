@@ -52,7 +52,11 @@ function App() {
   async function createUser(event, role) {
     event.preventDefault(); setError(''); setNotice('')
     const form = role === 'faculty' ? facultyForm : studentForm
-    try { await apiCall(await adminUser.getIdToken(), 'POST', { ...form, role }); setNotice(`${role === 'faculty' ? 'Faculty' : 'Student'} account created.`); role === 'faculty' ? setFacultyForm(facultyDefaults) : setStudentForm(studentDefaults) } catch (requestError) { setError(requestError.message) }
+    try {
+      await apiCall(await adminUser.getIdToken(), 'POST', { ...form, role })
+      setNotice(`${role === 'faculty' ? 'Faculty' : 'Student'} account created.`)
+      if (role === 'faculty') setFacultyForm(facultyDefaults); else setStudentForm(studentDefaults)
+    } catch (requestError) { setError(requestError.message) }
   }
   async function createAcademic(event) {
     event.preventDefault(); setError(''); setNotice('')

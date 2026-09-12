@@ -31,7 +31,13 @@ export default async function handler(request, response) {
         createdBy: claims.uid,
       }
       const reference = await adminDb.collection(collectionName).add(document)
-      return response.status(201).json({ id: reference.id, ...document })
+      return response.status(201).json({
+        id: reference.id,
+        name: document.name,
+        code: document.code,
+        departmentId: document.departmentId,
+        branchId: document.branchId,
+      })
     }
 
     if (request.method === 'POST') {
