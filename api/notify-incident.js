@@ -52,7 +52,20 @@ export default async function handler(request, response) {
         latitude: String(incident.latitude ?? ''),
         longitude: String(incident.longitude ?? ''),
       },
-      android: { priority: 'high' },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'sos_alerts',
+          priority: 'max',
+          sound: 'default',
+          defaultSound: true,
+          defaultVibrateTimings: true,
+          visibility: 'public',
+          notificationCount: 1,
+          clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+          fullScreenIntent: true,
+        },
+      },
     })
 
     return response.status(200).json({ sent: result.successCount, failed: result.failureCount })
