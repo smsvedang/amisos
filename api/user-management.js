@@ -9,13 +9,51 @@ function requireAdmin(claims) {
   }
 }
 
+async function sendVerificationEmail(uid) {
+  const apiKey = process.env.FIREBASE_WEB_API_KEY
+  if (!apiKey) throw new Error('FIREBASE_WEB_API_KEY is required to send verification emails')
+  const customToken = await adminAuth.createCustomToken(uid)
+  const signInResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: customToken, returnSecureToken: true }),
+  })
+  const signInResult = await signInResponse.json()
+  if (!signInResponse.ok) throw new Error(signInResult.error?.message || 'Unable to create verification session')
+  const emailResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestType: 'VERIFY_EMAIL', idToken: signInResult.idToken }),
+  })
+  const emailResult = await emailResponse.json()
+  if (!emailResponse.ok) throw new Error(emailResult.error?.message || 'Unable to send verification email')
+}
+
 export default async function handler(request, response) {
-  if (!['POST', 'PATCH', 'DELETE'].includes(request.method)) return methodNotAllowed(response)
+  if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(request.method)) return methodNotAllowed(response)
 
   try {
     const claims = await verifyBearerToken(request)
     requireAdmin(claims)
     const body = request.body || {}
+
+    if (request.method === 'GET') {
+      const snapshot = await adminDb.collection('users').get()
+      const users = await Promise.all(snapshot.docs.map(async (document) => {
+        const data = document.data()
+        const authUser = await adminAuth.getUser(document.id)
+        return { id: document.id, ...data, emailVerified: authUser.emailVerified }
+      }))
+      return response.status(200).json({ users })
+    }
+
+    if (request.method === 'POST' && body.entity === 'resendVerification') {
+      if (!body.uid) return response.status(400).json({ error: 'A user id is required' })
+      const authUser = await adminAuth.getUser(body.uid)
+      if (authUser.emailVerified) return response.status(400).json({ error: 'This email is already verified' })
+      await sendVerificationEmail(body.uid)
+      return response.status(200).json({ ok: true })
+    }
 
     if (request.method === 'DELETE') {
       const { collectionName, id } = body
@@ -37,10 +75,10 @@ export default async function handler(request, response) {
     }
 
     if (request.method === 'PATCH' && body.entity === 'user') {
-      const { id, name, phone = '', department = '', level = 'L1', branchId = '', classId = '', studentId = '', hostel = '', roomNumber = '' } = body
+      const { id, name, phone = '', department = '', level = 'L1', branchId = '', classId = '', studentId = '', hostel = '', wing = '', roomNumber = '' } = body
       if (!id || !String(name).trim()) return response.status(400).json({ error: 'A user id and name are required' })
       await adminAuth.updateUser(id, { displayName: String(name).trim(), phoneNumber: String(phone).trim() || undefined })
-      await adminDb.collection('users').doc(id).set({ name: String(name).trim(), phone: String(phone).trim(), department: String(department).trim(), level: String(level).trim(), branchId: String(branchId).trim(), classId: String(classId).trim(), studentId: String(studentId).trim(), hostel: String(hostel).trim(), roomNumber: String(roomNumber).trim(), updatedAt: FieldValue.serverTimestamp(), updatedBy: claims.uid }, { merge: true })
+      await adminDb.collection('users').doc(id).set({ name: String(name).trim(), phone: String(phone).trim(), department: String(department).trim(), level: String(level).trim(), branchId: String(branchId).trim(), classId: String(classId).trim(), studentId: String(studentId).trim(), hostel: String(hostel).trim(), wing: String(wing).trim(), roomNumber: String(roomNumber).trim(), updatedAt: FieldValue.serverTimestamp(), updatedBy: claims.uid }, { merge: true })
       return response.status(200).json({ ok: true })
     }
 
@@ -68,7 +106,7 @@ export default async function handler(request, response) {
     }
 
     if (request.method === 'POST') {
-      const { email, password, name, role, phone = '', department = '', level = 'L1', branchId = '', classId = '', studentId = '', hostel = '', roomNumber = '' } = body
+      const { email, password, name, role, phone = '', department = '', level = 'L1', branchId = '', classId = '', studentId = '', hostel = '', wing = '', roomNumber = '' } = body
       if (!email || !password || !name || !['student', 'faculty'].includes(role)) {
         return response.status(400).json({ error: 'email, password, name, and role are required' })
       }
@@ -86,6 +124,7 @@ export default async function handler(request, response) {
           classId: String(classId).trim(),
           studentId: String(studentId).trim(),
           hostel: String(hostel).trim(),
+          wing: String(wing).trim(),
           roomNumber: String(roomNumber).trim(),
           facultyIds: [],
           createdAt: FieldValue.serverTimestamp(),
