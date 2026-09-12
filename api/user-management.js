@@ -49,7 +49,8 @@ export default async function handler(request, response) {
           return { id: document.id, ...data, emailVerified: false, authAccountMissing: true }
         }
       }))
-      return response.status(200).json({ users })
+      const settingsSnapshot = await adminDb.collection('settings').doc('escalation').get()
+      return response.status(200).json({ users, settings: settingsSnapshot.data() || { delaySeconds: 15 } })
     }
 
     if (request.method === 'POST' && body.entity === 'resendVerification') {
@@ -83,11 +84,20 @@ export default async function handler(request, response) {
       return response.status(200).json({ ok: true })
     }
 
+    if (request.method === 'PATCH' && body.entity === 'settings') {
+      const delaySeconds = Number(body.delaySeconds)
+      if (!Number.isInteger(delaySeconds) || delaySeconds < 5 || delaySeconds > 3600) {
+        return response.status(400).json({ error: 'Escalation delay must be between 5 and 3600 seconds' })
+      }
+      await adminDb.collection('settings').doc('escalation').set({ delaySeconds, updatedAt: FieldValue.serverTimestamp(), updatedBy: claims.uid }, { merge: true })
+      return response.status(200).json({ ok: true, delaySeconds })
+    }
+
     if (request.method === 'PATCH' && body.entity === 'user') {
-      const { id, name, phone = '', department = '', level = 'L1', branchId = '', classId = '', studentId = '', hostel = '', wing = '', roomNumber = '' } = body
+      const { id, email = '', name, phone = '', department = '', level = 'L1', branchId = '', classId = '', studentId = '', hostel = '', wing = '', roomNumber = '' } = body
       if (!id || !String(name).trim()) return response.status(400).json({ error: 'A user id and name are required' })
-      await adminAuth.updateUser(id, { displayName: String(name).trim(), phoneNumber: String(phone).trim() || undefined })
-      await adminDb.collection('users').doc(id).set({ name: String(name).trim(), phone: String(phone).trim(), department: String(department).trim(), level: String(level).trim(), branchId: String(branchId).trim(), classId: String(classId).trim(), studentId: String(studentId).trim(), hostel: String(hostel).trim(), wing: String(wing).trim(), roomNumber: String(roomNumber).trim(), updatedAt: FieldValue.serverTimestamp(), updatedBy: claims.uid }, { merge: true })
+      await adminAuth.updateUser(id, { email: String(email).trim() || undefined, displayName: String(name).trim(), phoneNumber: String(phone).trim() || undefined })
+      await adminDb.collection('users').doc(id).set({ email: String(email).trim(), name: String(name).trim(), phone: String(phone).trim(), department: String(department).trim(), level: String(level).trim(), branchId: String(branchId).trim(), classId: String(classId).trim(), studentId: String(studentId).trim(), hostel: String(hostel).trim(), wing: String(wing).trim(), roomNumber: String(roomNumber).trim(), updatedAt: FieldValue.serverTimestamp(), updatedBy: claims.uid }, { merge: true })
       return response.status(200).json({ ok: true })
     }
 

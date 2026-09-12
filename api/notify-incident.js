@@ -27,8 +27,15 @@ export default async function handler(request, response) {
       return response.status(200).json({ sent: 0, message: 'No faculty assigned' })
     }
 
+    const currentFacultyIndex = Number(incident.currentFacultyIndex || 0)
+    const currentFacultyId = incident.currentFacultyId || facultyIds[currentFacultyIndex]
+    const targetFacultyIds = currentFacultyId ? [currentFacultyId] : facultyIds
+    if (!incident.currentFacultyId) {
+      await incidentRef.update({ currentFacultyId, currentFacultyIndex })
+    }
+
     const facultySnapshot = await adminDb.collection('users')
-      .where(FieldPath.documentId(), 'in', facultyIds.slice(0, 30))
+      .where(FieldPath.documentId(), 'in', targetFacultyIds.slice(0, 30))
       .get()
     const tokens = facultySnapshot.docs
       .map((document) => document.data().fcmToken)
@@ -47,6 +54,7 @@ export default async function handler(request, response) {
       data: {
         incidentId,
         status: incident.status || 'ringing',
+        facultyName: String(facultySnapshot.docs[0]?.data().name || 'Faculty'),
         hostel: String(incident.hostel || ''),
         roomNumber: String(incident.roomNumber || ''),
         latitude: String(incident.latitude ?? ''),
