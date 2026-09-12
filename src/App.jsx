@@ -8,7 +8,10 @@ const emptyFaculty = { email: '', password: '', name: '', phone: '', department:
 const emptyStudent = { email: '', password: '', name: '', phone: '', studentId: '', department: '', branchId: '', classId: '', hostel: '', wing: '', roomNumber: '' }
 const emptyAcademic = { collectionName: 'branches', name: '', code: '' }
 
-async function apiCall(token, method, body) {
+async function apiCall(tokenOrPromise, method, body) {
+  const token = typeof tokenOrPromise === 'string'
+    ? tokenOrPromise
+    : await tokenOrPromise
   const options = { method, headers: { Authorization: `Bearer ${token}` } }
   if (method !== 'GET' && method !== 'HEAD') {
     options.headers['Content-Type'] = 'application/json'
@@ -51,14 +54,14 @@ function App() {
     if (!db || !admin) return undefined
     const sources = [['incidents', setIncidents], ['branches', (items) => setAcademic((current) => ({ ...current, branches: items }))], ['departments', (items) => setAcademic((current) => ({ ...current, departments: items }))], ['classes', (items) => setAcademic((current) => ({ ...current, classes: items }))]]
     const stops = sources.map(([name, setter]) => onSnapshot(collection(db, name), (snapshot) => setter(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))), (snapshotError) => setError(`Could not load ${name}: ${snapshotError.message}`)))
-    apiCall(admin.getIdToken(), 'GET', {}).then((result) => setUsers(result.users)).catch((requestError) => setError(requestError.message))
+    apiCall(admin.getIdToken(true), 'GET', {}).then((result) => setUsers(result.users)).catch((requestError) => setError(requestError.message))
     return () => stops.forEach((stop) => stop())
   }, [admin])
 
   async function login(event) { event.preventDefault(); try { await signInWithEmailAndPassword(auth, email.trim(), password) } catch (loginError) { setError(loginError.message || 'Unable to sign in.') } }
-  async function refreshUsers() { const result = await apiCall(await admin.getIdToken(), 'GET', {}); setUsers(result.users) }
-  async function createUser(event, role, form, reset) { event.preventDefault(); try { await apiCall(await admin.getIdToken(), 'POST', { ...form, role }); await refreshUsers(); reset(); setNotice(`${role} account created.`) } catch (requestError) { setError(requestError.message) } }
-  async function createAcademic(event) { event.preventDefault(); try { await apiCall(await admin.getIdToken(), 'POST', { ...academicForm, entity: 'academic' }); setAcademicForm(emptyAcademic); setNotice('Academic record created.') } catch (requestError) { setError(requestError.message) } }
+  async function refreshUsers() { const result = await apiCall(admin.getIdToken(true), 'GET', {}); setUsers(result.users) }
+  async function createUser(event, role, form, reset) { event.preventDefault(); try { await apiCall(admin.getIdToken(true), 'POST', { ...form, role }); await refreshUsers(); reset(); setNotice(`${role} account created.`) } catch (requestError) { setError(requestError.message) } }
+  async function createAcademic(event) { event.preventDefault(); try { await apiCall(admin.getIdToken(true), 'POST', { ...academicForm, entity: 'academic' }); setAcademicForm(emptyAcademic); setNotice('Academic record created.') } catch (requestError) { setError(requestError.message) } }
   async function mutate(action, collectionName, id, record = {}) {
     if (action === 'delete') setDialog({ type: 'delete', collectionName, id, title: 'Delete record?', message: 'This action permanently removes the selected record.' })
     if (action === 'edit') setDialog({ type: 'edit', collectionName, id, record, title: 'Edit record' })
@@ -69,13 +72,13 @@ function App() {
     const form = new FormData(event.currentTarget)
     try {
       const payload = type === 'delete' ? { collectionName, id } : { entity: collectionName === 'users' ? 'user' : 'academic', collectionName, id, ...record, name: form.get('name') }
-      await apiCall(await admin.getIdToken(), type === 'delete' ? 'DELETE' : 'PATCH', payload)
+      await apiCall(admin.getIdToken(true), type === 'delete' ? 'DELETE' : 'PATCH', payload)
       if (collectionName === 'users') await refreshUsers()
       setDialog(null); setNotice(type === 'delete' ? 'Record deleted.' : 'Record updated.')
     } catch (requestError) { setError(requestError.message) }
   }
   async function resendVerification(uid) {
-    try { await apiCall(await admin.getIdToken(), 'POST', { entity: 'resendVerification', uid }); setNotice('Verification email sent.') } catch (requestError) { setError(requestError.message) }
+    try { await apiCall(admin.getIdToken(true), 'POST', { entity: 'resendVerification', uid }); setNotice('Verification email sent.') } catch (requestError) { setError(requestError.message) }
   }
 
   if (!admin) return <Login error={error} email={email} password={password} setEmail={setEmail} setPassword={setPassword} onSubmit={login} />
@@ -92,7 +95,7 @@ function AcademicManagement({ form, setForm, onSubmit, academic, onMutate }) { c
 function RecordList({ title, records, kind, onMutate, onResend }) { return <div className="panel"><PanelHeader title={title} count={`${records.length} records`} /><div className="user-list">{records.map((record) => <div className="user-row" key={record.uid}><div><strong>{record.name || record.email}</strong><small>{record.email || 'No email'}</small><span className={`verification ${record.emailVerified ? 'verified' : 'unverified'}`}>{record.emailVerified ? 'Email verified' : 'Email not verified'}</span></div><div className="row-actions"><span className="status-pill">{kind === 'faculty' ? record.level || 'L1' : record.studentId || 'Student'}</span>{!record.emailVerified && <button className="icon-btn" onClick={() => onResend(record.uid)}>Resend email link</button>}<button className="icon-btn" onClick={() => onMutate('edit', 'users', record.uid, record)}>Edit</button><button className="icon-btn danger-btn" onClick={() => onMutate('delete', 'users', record.uid)}>Delete</button></div></div>)}</div></div> }
 
 function Dialog({ dialog, onClose, onSubmit }) { if (dialog.type === 'delete') return <div className="dialog-backdrop"><div className="dialog"><h2>{dialog.title}</h2><p>{dialog.message}</p><div className="dialog-actions"><button className="ghost-btn" onClick={onClose}>Cancel</button><button className="primary-btn danger-solid" onClick={onSubmit}>Delete</button></div></div></div>; return <div className="dialog-backdrop"><form className="dialog form-panel" onSubmit={onSubmit}><h2>{dialog.title}</h2><Field label="Name"><input name="name" defaultValue={dialog.record.name || ''} required /></Field><div className="dialog-actions"><button type="button" className="ghost-btn" onClick={onClose}>Cancel</button><button className="primary-btn">Save changes</button></div></form></div> }
-function Assignments({ users, admin }) { const students = users.filter((user) => user.role === 'student'); const faculty = users.filter((user) => user.role === 'faculty'); const [form, setForm] = useState({ studentUid: '', facultyUid: '', level: 'campus' }); const [message, setMessage] = useState(''); async function submit(event) { event.preventDefault(); try { await apiCall(await admin.getIdToken(), 'PATCH', form); setMessage('Faculty assignment saved.') } catch (assignmentError) { setMessage(assignmentError.message) } } return <section className="management-grid"><form className="panel form-panel" onSubmit={submit}><PanelHeader title="Assign faculty" count="Responder coverage" /><Field label="Student"><select value={form.studentUid} onChange={(event) => setForm({ ...form, studentUid: event.target.value })} required><option value="">Select student</option>{students.map((user) => <option key={user.uid} value={user.uid}>{user.name || user.email}</option>)}</select></Field><Field label="Faculty"><select value={form.facultyUid} onChange={(event) => setForm({ ...form, facultyUid: event.target.value })} required><option value="">Select faculty</option>{faculty.map((user) => <option key={user.uid} value={user.uid}>{user.name || user.email}</option>)}</select></Field><button className="primary-btn">Save assignment</button>{message && <p className="muted">{message}</p>}</form><div className="panel"><PanelHeader title="Student placement" count={`${students.length} students`} />{students.map((student) => <div className="directory-row" key={student.uid}><strong>{student.name || student.email}</strong><small>{student.branchId || 'No branch'} · {student.classId || 'No class'} · {student.facultyIds?.length || 0} faculty</small></div>)}</div></section> }
+function Assignments({ users, admin }) { const students = users.filter((user) => user.role === 'student'); const faculty = users.filter((user) => user.role === 'faculty'); const [form, setForm] = useState({ studentUid: '', facultyUid: '', level: 'campus' }); const [message, setMessage] = useState(''); async function submit(event) { event.preventDefault(); try { await apiCall(admin.getIdToken(true), 'PATCH', form); setMessage('Faculty assignment saved.') } catch (assignmentError) { setMessage(assignmentError.message) } } return <section className="management-grid"><form className="panel form-panel" onSubmit={submit}><PanelHeader title="Assign faculty" count="Responder coverage" /><Field label="Student"><select value={form.studentUid} onChange={(event) => setForm({ ...form, studentUid: event.target.value })} required><option value="">Select student</option>{students.map((user) => <option key={user.uid} value={user.uid}>{user.name || user.email}</option>)}</select></Field><Field label="Faculty"><select value={form.facultyUid} onChange={(event) => setForm({ ...form, facultyUid: event.target.value })} required><option value="">Select faculty</option>{faculty.map((user) => <option key={user.uid} value={user.uid}>{user.name || user.email}</option>)}</select></Field><button className="primary-btn">Save assignment</button>{message && <p className="muted">{message}</p>}</form><div className="panel"><PanelHeader title="Student placement" count={`${students.length} students`} />{students.map((student) => <div className="directory-row" key={student.uid}><strong>{student.name || student.email}</strong><small>{student.branchId || 'No branch'} · {student.classId || 'No class'} · {student.facultyIds?.length || 0} faculty</small></div>)}</div></section> }
 function AcademicSelect({ value, onChange, items }) { return <select value={value} onChange={(event) => onChange(event.target.value)}><option value="">Select record</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select> }
 function Field({ label, children }) { return <label>{label}{children}</label> }
 function PanelHeader({ title, count }) { return <div className="panel-header"><h2>{title}</h2><span className="record-count">{count}</span></div> }
