@@ -41,8 +41,13 @@ export default async function handler(request, response) {
       const snapshot = await adminDb.collection('users').get()
       const users = await Promise.all(snapshot.docs.map(async (document) => {
         const data = document.data()
-        const authUser = await adminAuth.getUser(document.id)
-        return { id: document.id, ...data, emailVerified: authUser.emailVerified }
+        try {
+          const authUser = await adminAuth.getUser(document.id)
+          return { id: document.id, ...data, emailVerified: authUser.emailVerified }
+        } catch (error) {
+          if (error.code !== 'auth/user-not-found') throw error
+          return { id: document.id, ...data, emailVerified: false, authAccountMissing: true }
+        }
       }))
       return response.status(200).json({ users })
     }
@@ -60,7 +65,11 @@ export default async function handler(request, response) {
       if (!['users', 'branches', 'departments', 'classes', 'facultyAssignments'].includes(collectionName) || !id) {
         return response.status(400).json({ error: 'A valid collection and record id are required' })
       }
-      if (collectionName === 'users') await adminAuth.deleteUser(id)
+      if (collectionName === 'users') {
+        await adminAuth.deleteUser(id).catch((error) => {
+          if (error.code !== 'auth/user-not-found') throw error
+        })
+      }
       await adminDb.collection(collectionName).doc(id).delete()
       return response.status(200).json({ ok: true })
     }
